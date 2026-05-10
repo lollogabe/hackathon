@@ -1,0 +1,61 @@
+family,method,split,level,true_negative,false_positive,false_negative,true_positive
+family_a,Bag RBF,test,Dataset,0,2,0,2
+family_a,Classical RBF,test,Dataset,0,2,0,2
+family_a,Majority,test,Dataset,2,0,2,0
+family_a,PCA Linear,test,Dataset,0,2,0,2
+family_a,Quantum ZZ,test,Dataset,0,2,0,2
+family_a,Bag RBF,test,IP instance,120,16,35,125
+family_a,Classical RBF,test,IP instance,1273,252,103,581
+family_a,Majority,test,IP instance,1525,0,684,0
+family_a,PCA Linear,test,IP instance,1504,21,36,648
+family_a,Quantum ZZ,test,IP instance,1181,344,162,522
+family_a,Bag RBF,test,Window,0,0,0,2
+family_a,Classical RBF,test,Window,1,20,0,9
+family_a,Majority,test,Window,21,0,9,0
+family_a,PCA Linear,test,Window,18,3,0,9
+family_a,Quantum ZZ,test,Window,0,21,0,9
+family_a,Bag RBF,validation,Dataset,0,2,0,2
+family_a,Classical RBF,validation,Dataset,0,2,0,2
+family_a,Majority,validation,Dataset,2,0,2,0
+family_a,PCA Linear,validation,Dataset,0,2,0,2
+family_a,Quantum ZZ,validation,Dataset,0,2,0,2
+family_a,Bag RBF,validation,IP instance,119,15,36,108
+family_a,Classical RBF,validation,IP instance,1253,243,22,366
+family_a,Majority,validation,IP instance,1496,0,388,0
+family_a,PCA Linear,validation,IP instance,1463,33,0,388
+family_a,Quantum ZZ,validation,IP instance,1172,324,95,293
+family_a,Bag RBF,validation,Window,0,0,0,2
+family_a,Classical RBF,validation,Window,1,23,0,6
+family_a,Majority,validation,Window,24,0,6,0
+family_a,PCA Linear,validation,Window,18,6,0,6
+family_a,Quantum ZZ,validation,Window,0,24,0,6
+family_b,Bag RBF,test,Dataset,2,0,0,2
+family_b,Classical RBF,test,Dataset,0,2,0,2
+family_b,Majority,test,Dataset,2,0,2,0
+family_b,PCA Linear,test,Dataset,1,1,0,2
+family_b,Quantum ZZ,test,Dataset,0,2,0,2
+family_b,Bag RBF,test,IP instance,133,0,1,19
+family_b,Classical RBF,test,IP instance,1414,86,14,66
+family_b,Majority,test,IP instance,1500,0,80,0
+family_b,PCA Linear,test,IP instance,1494,6,0,80
+family_b,Quantum ZZ,test,IP instance,1360,140,44,36
+family_b,Bag RBF,test,Window,0,0,0,2
+family_b,Classical RBF,test,Window,7,15,0,8
+family_b,Majority,test,Window,22,0,8,0
+family_b,PCA Linear,test,Window,21,1,0,8
+family_b,Quantum ZZ,test,Window,4,18,0,8
+family_b,Bag RBF,validation,Dataset,2,0,0,2
+family_b,Classical RBF,validation,Dataset,0,2,0,2
+family_b,Majority,validation,Dataset,2,0,2,0
+family_b,PCA Linear,validation,Dataset,0,2,0,2
+family_b,Quantum ZZ,validation,Dataset,0,2,0,2
+family_b,Bag RBF,validation,IP instance,140,0,0,20
+family_b,Classical RBF,validation,IP instance,1434,88,8,42
+family_b,Majority,validation,IP instance,1522,0,50,0
+family_b,PCA Linear,validation,IP instance,1510,12,0,50
+family_b,Quantum ZZ,validation,IP instance,1377,145,9,41
+family_b,Bag RBF,validation,Window,0,0,0,2
+family_b,Classical RBF,validation,Window,7,18,0,5
+family_b,Majority,validation,Window,25,0,5,0
+family_b,PCA Linear,validation,Window,21,4,0,5
+family_b,Quantum ZZ,validation,Window,2,23,0,5

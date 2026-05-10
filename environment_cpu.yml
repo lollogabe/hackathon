@@ -1,0 +1,17 @@
+name: ddos-quantum-cpu
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pandas
+  - numpy
+  - scikit-learn
+  - pytorch
+  - tqdm
+  - matplotlib
+  - joblib
+  - pytest
+  - pip
+  - pip:
+      - qiskit
+      - qiskit-aer
