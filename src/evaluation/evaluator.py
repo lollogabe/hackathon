@@ -174,12 +174,45 @@ def plot_temporal_detection(
 ) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(window_scores["window_id"], window_scores["score"], marker="o", label="max score")
+    scores = window_scores.copy()
+    scores["prediction"] = (scores["score"] >= threshold).astype(int)
+    fig, ax = plt.subplots(figsize=(11, 4.5))
     true_windows = window_scores[window_scores["y_window"] == 1]["window_id"].astype(int).tolist()
     for window_id in true_windows:
-        ax.axvspan(window_id - 0.5, window_id + 0.5, color="tab:red", alpha=0.18)
+        ax.axvspan(
+            window_id - 0.5,
+            window_id + 0.5,
+            color="tab:red",
+            alpha=0.16,
+            label="true burst window" if window_id == true_windows[0] else None,
+        )
+    ax.plot(scores["window_id"], scores["score"], marker="o", label="max score")
+    predicted = scores[scores["prediction"] == 1]
+    if not predicted.empty:
+        ax.scatter(
+            predicted["window_id"],
+            predicted["score"],
+            marker="^",
+            s=95,
+            color="tab:orange",
+            edgecolor="black",
+            linewidth=0.5,
+            zorder=5,
+            label="predicted attack",
+        )
     ax.axhline(threshold, linestyle="--", color="black", label="threshold")
+    false_positives = int(((scores["prediction"] == 1) & (scores["y_window"] == 0)).sum())
+    missed = int(((scores["prediction"] == 0) & (scores["y_window"] == 1)).sum())
+    ax.text(
+        0.99,
+        0.03,
+        f"predicted={int(scores['prediction'].sum())}  false positives={false_positives}  missed={missed}",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "alpha": 0.8},
+    )
     ax.set_xlabel("window index")
     ax.set_ylabel("max instance score")
     ax.set_ylim(0.0, 1.0)

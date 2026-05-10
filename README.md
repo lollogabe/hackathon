@@ -90,6 +90,14 @@ This writes slide-friendly comparison charts, confusion-matrix plots, metric hea
 
 For speaker notes and artifact-by-artifact interpretation, see `PRESENTATION_EXPLANATIONS.md`.
 
+To overlay Quantum ZZ temporal scores with the best online/windowed model by test window F1:
+
+```bash
+python temporal_compare.py
+```
+
+This writes `outputs/plots/temporal_compare_{family}_{dataset_name}.png` and `outputs/tables/temporal_comparison_summary.*`.
+
 ## Benchmarking
 
 `benchmarks.py` appends four baselines under the `benchmarks` key in `outputs/results_{family}.json`:
