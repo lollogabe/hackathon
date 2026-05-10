@@ -67,6 +67,26 @@ class QuantumEmbedder:
             matrix = np.empty((0, self.output_dim), dtype="float32")
         return torch.as_tensor(matrix, dtype=torch.float32, device=self.device)
 
+    def statevectors(self, angles: np.ndarray, show_progress: bool = False) -> np.ndarray:
+        theta = np.asarray(angles, dtype="float64")
+        if theta.ndim != 2 or theta.shape[1] != self.n_qubits:
+            raise ValueError(
+                f"Expected angle matrix with shape (n, {self.n_qubits}), got {theta.shape}."
+            )
+        batches = range(0, theta.shape[0], self.batch_size)
+        if show_progress:
+            batches = tqdm(list(batches), desc="Quantum statevectors")
+        outputs: list[np.ndarray] = []
+        for start in batches:
+            batch = theta[start : start + self.batch_size]
+            if self._active_backend == "qiskit":
+                outputs.append(self._statevectors_qiskit_batch(batch))
+            else:
+                outputs.append(self._statevectors_numpy_batch(batch))
+        if outputs:
+            return np.vstack(outputs).astype("complex64")
+        return np.empty((0, self.dimension), dtype="complex64")
+
     def _select_backend(self, requested: str) -> str:
         if requested == "numpy":
             return "numpy"
@@ -92,7 +112,7 @@ class QuantumEmbedder:
             matrix = np.kron(matrix, single)
         return matrix
 
-    def _embed_numpy_batch(self, theta: np.ndarray) -> np.ndarray:
+    def _statevectors_numpy_batch(self, theta: np.ndarray) -> np.ndarray:
         state = np.zeros((theta.shape[0], self.dimension), dtype="complex128")
         state[:, 0] = 1.0 + 0.0j
         hadamard_t = self._hadamard_all.T
@@ -108,6 +128,10 @@ class QuantumEmbedder:
                 pair_phase = 0.0
             phase = 0.5 * (single_phase + pair_phase)
             state *= np.exp(-1j * phase)
+        return state
+
+    def _embed_numpy_batch(self, theta: np.ndarray) -> np.ndarray:
+        state = self._statevectors_numpy_batch(theta)
         probabilities = np.abs(state) ** 2
         z_expectations = probabilities @ self._z_eigs
         if self.n_qubits > 1:
@@ -134,6 +158,15 @@ class QuantumEmbedder:
         return _QiskitObjects(simulator=simulator, circuit=circuit, parameters=parameters)
 
     def _embed_qiskit_batch(self, theta: np.ndarray) -> np.ndarray:
+        statevectors = self._statevectors_qiskit_batch(theta)
+        probabilities = np.abs(statevectors) ** 2
+        z_expectations = probabilities @ self._z_eigs
+        if self.n_qubits > 1:
+            zz_expectations = probabilities @ self._zz_eigs
+            return np.concatenate([z_expectations, zz_expectations], axis=1)
+        return z_expectations
+
+    def _statevectors_qiskit_batch(self, theta: np.ndarray) -> np.ndarray:
         if self._qiskit is None:
             raise RuntimeError("Qiskit backend was not initialised.")
         outputs = []
@@ -145,11 +178,5 @@ class QuantumEmbedder:
             bound = self._qiskit.circuit.assign_parameters(bind, inplace=False)
             result = self._qiskit.simulator.run(bound).result()
             statevector = np.asarray(result.get_statevector(bound), dtype="complex128")
-            probabilities = np.abs(statevector) ** 2
-            z_expectations = probabilities @ self._z_eigs
-            if self.n_qubits > 1:
-                zz_expectations = probabilities @ self._zz_eigs
-                outputs.append(np.concatenate([z_expectations, zz_expectations]))
-            else:
-                outputs.append(z_expectations)
-        return np.vstack(outputs).astype("float64")
+            outputs.append(statevector)
+        return np.vstack(outputs).astype("complex128")

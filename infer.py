@@ -8,6 +8,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import joblib
 import pandas as pd
 import torch
 
@@ -16,6 +17,7 @@ from src.features.pipeline import compute_instance_features
 from src.model.scorer import load_model, load_threshold
 from src.preprocessing.preprocessor import Preprocessor
 from src.quantum.embedder import QuantumEmbedder
+from src.training.trainer import quantum_kernel_matrix
 from src.utils.config import configure_logging, ensure_output_dirs, load_config, resolve_device
 from src.utils.seed import set_global_seed
 
@@ -58,20 +60,32 @@ def main() -> None:
     logger.info("Using device: %s", device)
 
     preprocessor = Preprocessor.load(output_root / f"preprocessor_{args.family}.pkl")
-    model = load_model(output_root / f"best_model_{args.family}.pt", device)
+    architecture = config.get("quantum_architecture", "zz_linear")
+    model = None
+    kernel_payload = None
+    if architecture == "quantum_kernel":
+        kernel_payload = joblib.load(output_root / f"best_model_{args.family}.joblib")
+    else:
+        model = load_model(
+            output_root / f"best_model_{args.family}.pt",
+            device,
+            expected_architecture=architecture,
+        )
     configured_threshold = float(config["inference_threshold"])
     threshold = (
         load_threshold(output_root / f"threshold_{args.family}.json", configured_threshold)
         if config["use_calibrated_threshold"]
         else configured_threshold
     )
-    embedder = QuantumEmbedder(
-        n_qubits=int(config["pca_components"]),
-        reps=int(config["circuit_reps"]),
-        device=device,
-        backend=config["quantum_backend"],
-        batch_size=int(config["quantum_batch_size"]),
-    )
+    embedder = None
+    if architecture in {"zz_linear", "quantum_kernel"}:
+        embedder = QuantumEmbedder(
+            n_qubits=int(config["pca_components"]),
+            reps=int(config["circuit_reps"]),
+            device=device,
+            backend=config["quantum_backend"],
+            batch_size=int(config["quantum_batch_size"]),
+        )
 
     rows = []
     input_path = Path(args.input)
@@ -86,10 +100,15 @@ def main() -> None:
             max_score = 0.0
             malicious_ips: list[str] = []
         else:
-            angles = preprocessor.transform(features)
-            quantum_features = embedder.embed(angles, show_progress=False)
-            with torch.no_grad():
-                probabilities = torch.sigmoid(model(quantum_features)).detach().cpu().numpy()
+            probabilities = _score_features(
+                features,
+                preprocessor,
+                model,
+                embedder,
+                kernel_payload,
+                architecture,
+                device,
+            )
             features = features.copy()
             features["score"] = probabilities
             flagged = features[features["score"] >= threshold].sort_values(
@@ -120,6 +139,37 @@ def main() -> None:
         plots_dir / f"infer_scores_{args.family}_{input_path.stem}.png",
     )
     logger.info("Saved inference summary to %s", summary_path)
+
+
+def _score_features(
+    features: pd.DataFrame,
+    preprocessor: Preprocessor,
+    model: torch.nn.Module | None,
+    embedder: QuantumEmbedder | None,
+    kernel_payload: dict | None,
+    architecture: str,
+    device: torch.device,
+):
+    angles = preprocessor.transform(features)
+    if architecture == "zz_linear":
+        if model is None or embedder is None:
+            raise RuntimeError("ZZ-linear inference requires a model and embedder.")
+        quantum_features = embedder.embed(angles, show_progress=False)
+        with torch.no_grad():
+            return torch.sigmoid(model(quantum_features)).detach().cpu().numpy()
+    if architecture == "vqc":
+        if model is None:
+            raise RuntimeError("VQC inference requires a torch model.")
+        angle_tensor = torch.as_tensor(angles, dtype=torch.float32, device=device)
+        with torch.no_grad():
+            return torch.sigmoid(model(angle_tensor)).detach().cpu().numpy()
+    if architecture == "quantum_kernel":
+        if kernel_payload is None or embedder is None:
+            raise RuntimeError("Quantum-kernel inference requires a saved kernel payload.")
+        states = embedder.statevectors(angles, show_progress=False)
+        kernel = quantum_kernel_matrix(states, kernel_payload["train_statevectors"])
+        return kernel_payload["classifier"].predict_proba(kernel)[:, 1]
+    raise ValueError(f"Unsupported quantum architecture: {architecture}")
 
 
 if __name__ == "__main__":

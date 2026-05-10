@@ -1,5 +1,0 @@
-family,dataset_name,best_online_model,best_online_test_window_f1,quantum_predicted_windows,quantum_false_positive_windows,quantum_missed_windows,best_predicted_windows,best_false_positive_windows,best_missed_windows
-family_a,attack_test_01,PCA Linear,0.8571428571428571,15,11,0,5,1,0
-family_a,attack_test_02,PCA Linear,0.8571428571428571,15,10,0,6,1,0
-family_b,attack_test_01,PCA Linear,0.9411764705882353,13,10,0,3,0,0
-family_b,attack_test_02,PCA Linear,0.9411764705882353,13,8,0,6,1,0

@@ -1,0 +1,675 @@
+{
+  "quantum_pipeline": {
+    "family": "family_b",
+    "architecture": "quantum_kernel",
+    "model_label": "Pure Quantum Kernel",
+    "threshold": 0.25,
+    "splits": {
+      "validation": {
+        "instance": {
+          "accuracy": 0.9815521628498728,
+          "precision": 0.7692307692307693,
+          "recall": 0.6,
+          "f1": 0.6741573033707865,
+          "auc_roc": 0.9319842312746386,
+          "confusion_matrix": [
+            [
+              1513,
+              9
+            ],
+            [
+              20,
+              30
+            ]
+          ]
+        },
+        "window": {
+          "accuracy": 0.8666666666666667,
+          "precision": 0.5555555555555556,
+          "recall": 1.0,
+          "f1": 0.7142857142857143,
+          "auc_roc": 1.0,
+          "confusion_matrix": [
+            [
+              21,
+              4
+            ],
+            [
+              0,
+              5
+            ]
+          ]
+        },
+        "dataset": {
+          "accuracy": 0.5,
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "auc_roc": 1.0,
+          "confusion_matrix": [
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ]
+          ]
+        },
+        "detection_latency": {
+          "mean": 0.0,
+          "std": 0.0,
+          "count": 4,
+          "missed": 0,
+          "latencies": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "test": {
+        "instance": {
+          "accuracy": 0.979746835443038,
+          "precision": 0.8428571428571429,
+          "recall": 0.7375,
+          "f1": 0.7866666666666666,
+          "auc_roc": 0.9659,
+          "confusion_matrix": [
+            [
+              1489,
+              11
+            ],
+            [
+              21,
+              59
+            ]
+          ]
+        },
+        "window": {
+          "accuracy": 0.9333333333333333,
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.8888888888888888,
+          "auc_roc": 1.0,
+          "confusion_matrix": [
+            [
+              20,
+              2
+            ],
+            [
+              0,
+              8
+            ]
+          ]
+        },
+        "dataset": {
+          "accuracy": 0.5,
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "auc_roc": 1.0,
+          "confusion_matrix": [
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ]
+          ]
+        },
+        "detection_latency": {
+          "mean": 0.0,
+          "std": 0.0,
+          "count": 7,
+          "missed": 0,
+          "latencies": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    }
+  },
+  "benchmarks": {
+    "majority_class": {
+      "family": "family_b",
+      "threshold": 0.5,
+      "splits": {
+        "validation": {
+          "instance": {
+            "accuracy": 0.9681933842239185,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "auc_roc": 0.5,
+            "confusion_matrix": [
+              [
+                1522,
+                0
+              ],
+              [
+                50,
+                0
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 0.8333333333333334,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "auc_roc": 0.5,
+            "confusion_matrix": [
+              [
+                25,
+                0
+              ],
+              [
+                5,
+                0
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "auc_roc": 0.5,
+            "confusion_matrix": [
+              [
+                2,
+                0
+              ],
+              [
+                2,
+                0
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": null,
+            "std": null,
+            "count": 0,
+            "missed": 4,
+            "latencies": []
+          }
+        },
+        "test": {
+          "instance": {
+            "accuracy": 0.9493670886075949,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "auc_roc": 0.5,
+            "confusion_matrix": [
+              [
+                1500,
+                0
+              ],
+              [
+                80,
+                0
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 0.7333333333333333,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "auc_roc": 0.5,
+            "confusion_matrix": [
+              [
+                22,
+                0
+              ],
+              [
+                8,
+                0
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "auc_roc": 0.5,
+            "confusion_matrix": [
+              [
+                2,
+                0
+              ],
+              [
+                2,
+                0
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": null,
+            "std": null,
+            "count": 0,
+            "missed": 7,
+            "latencies": []
+          }
+        }
+      }
+    },
+    "classical_window_rbf": {
+      "family": "family_b",
+      "threshold": 0.5,
+      "splits": {
+        "validation": {
+          "instance": {
+            "accuracy": 0.9389312977099237,
+            "precision": 0.3230769230769231,
+            "recall": 0.84,
+            "f1": 0.4666666666666667,
+            "auc_roc": 0.9793429697766098,
+            "confusion_matrix": [
+              [
+                1434,
+                88
+              ],
+              [
+                8,
+                42
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 0.4,
+            "precision": 0.21739130434782608,
+            "recall": 1.0,
+            "f1": 0.35714285714285715,
+            "auc_roc": 0.984,
+            "confusion_matrix": [
+              [
+                7,
+                18
+              ],
+              [
+                0,
+                5
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 0.5,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6666666666666666,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": 0.0,
+            "std": 0.0,
+            "count": 4,
+            "missed": 0,
+            "latencies": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "test": {
+          "instance": {
+            "accuracy": 0.9367088607594937,
+            "precision": 0.4342105263157895,
+            "recall": 0.825,
+            "f1": 0.5689655172413793,
+            "auc_roc": 0.9618583333333334,
+            "confusion_matrix": [
+              [
+                1414,
+                86
+              ],
+              [
+                14,
+                66
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 0.5,
+            "precision": 0.34782608695652173,
+            "recall": 1.0,
+            "f1": 0.5161290322580645,
+            "auc_roc": 0.9829545454545454,
+            "confusion_matrix": [
+              [
+                7,
+                15
+              ],
+              [
+                0,
+                8
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 0.5,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6666666666666666,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": 0.0,
+            "std": 0.0,
+            "count": 7,
+            "missed": 0,
+            "latencies": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    "pca_linear_ablation": {
+      "family": "family_b",
+      "threshold": 0.5,
+      "splits": {
+        "validation": {
+          "instance": {
+            "accuracy": 0.9923664122137404,
+            "precision": 0.8064516129032258,
+            "recall": 1.0,
+            "f1": 0.8928571428571429,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                1510,
+                12
+              ],
+              [
+                0,
+                50
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 0.8666666666666667,
+            "precision": 0.5555555555555556,
+            "recall": 1.0,
+            "f1": 0.7142857142857143,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                21,
+                4
+              ],
+              [
+                0,
+                5
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 0.5,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6666666666666666,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": 0.0,
+            "std": 0.0,
+            "count": 4,
+            "missed": 0,
+            "latencies": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "test": {
+          "instance": {
+            "accuracy": 0.9962025316455696,
+            "precision": 0.9302325581395349,
+            "recall": 1.0,
+            "f1": 0.963855421686747,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                1494,
+                6
+              ],
+              [
+                0,
+                80
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 0.9666666666666667,
+            "precision": 0.8888888888888888,
+            "recall": 1.0,
+            "f1": 0.9411764705882353,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                21,
+                1
+              ],
+              [
+                0,
+                8
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 0.75,
+            "precision": 0.6666666666666666,
+            "recall": 1.0,
+            "f1": 0.8,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                1,
+                1
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": 0.0,
+            "std": 0.0,
+            "count": 7,
+            "missed": 0,
+            "latencies": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    "classical_bag_level": {
+      "family": "family_b",
+      "threshold": 0.5,
+      "splits": {
+        "validation": {
+          "instance": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                140,
+                0
+              ],
+              [
+                0,
+                20
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "auc_roc": NaN,
+            "confusion_matrix": [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                2,
+                0
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": null,
+            "std": null,
+            "count": 0,
+            "missed": 4,
+            "latencies": []
+          }
+        },
+        "test": {
+          "instance": {
+            "accuracy": 0.9934640522875817,
+            "precision": 1.0,
+            "recall": 0.95,
+            "f1": 0.9743589743589743,
+            "auc_roc": 0.9857142857142858,
+            "confusion_matrix": [
+              [
+                133,
+                0
+              ],
+              [
+                1,
+                19
+              ]
+            ]
+          },
+          "window": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "auc_roc": NaN,
+            "confusion_matrix": [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "dataset": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "auc_roc": 1.0,
+            "confusion_matrix": [
+              [
+                2,
+                0
+              ],
+              [
+                0,
+                2
+              ]
+            ]
+          },
+          "detection_latency": {
+            "mean": null,
+            "std": null,
+            "count": 0,
+            "missed": 7,
+            "latencies": []
+          }
+        }
+      }
+    }
+  }
+}

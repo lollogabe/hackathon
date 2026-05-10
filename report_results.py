@@ -12,12 +12,19 @@ def parse_args() -> argparse.Namespace:
         description="Generate presentation-ready result tables and plots."
     )
     parser.add_argument("--config", default="config.json", help="Path to config.json")
+    parser.add_argument(
+        "--plots-only",
+        action="store_true",
+        help="Generate presentation plots and remove/skip outputs/tables.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
+    if args.plots_only:
+        config["write_report_tables"] = False
     configure_logging(config)
     written = generate_reports(config)
     logger = logging.getLogger(__name__)

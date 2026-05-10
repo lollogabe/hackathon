@@ -8,6 +8,7 @@ from src.data.windowing import add_window_id, derive_instance_labels, derive_win
 from src.features.pipeline import compute_instance_features
 from src.features.schema import FEATURE_COLUMNS
 from src.model.scorer import calibrate_threshold
+from src.model.scorer import VQCScorer
 from src.preprocessing.preprocessor import Preprocessor
 from src.quantum.embedder import QuantumEmbedder
 from src.utils.config import validate_config
@@ -85,6 +86,33 @@ def test_numpy_quantum_embedder_returns_device_tensor():
     assert torch.all(quantum_features >= -1.00001)
 
 
+def test_quantum_embedder_statevectors_are_normalized():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    angles = np.array([[0.1, -0.2, 0.3], [0.4, 0.5, -0.6]], dtype="float64")
+    embedder = QuantumEmbedder(
+        n_qubits=3,
+        reps=2,
+        device=device,
+        backend="numpy",
+        batch_size=2,
+    )
+    states = embedder.statevectors(angles)
+    assert states.shape == (2, 8)
+    np.testing.assert_allclose(np.sum(np.abs(states) ** 2, axis=1), np.ones(2), atol=1e-5)
+
+
+def test_vqc_scorer_forward_backward_on_device():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = VQCScorer(n_qubits=3, layers=2).to(device)
+    angles = torch.randn(4, 3, dtype=torch.float32, device=device)
+    labels = torch.tensor([0.0, 1.0, 0.0, 1.0], dtype=torch.float32, device=device)
+    logits = model(angles)
+    assert logits.shape == (4,)
+    loss = torch.nn.BCEWithLogitsLoss()(logits, labels)
+    loss.backward()
+    assert all(parameter.grad is not None for parameter in model.parameters())
+
+
 def test_threshold_calibration_selects_useful_threshold():
     probabilities = np.array([0.05, 0.1, 0.7, 0.9])
     labels = np.array([0, 0, 1, 1])
@@ -120,6 +148,10 @@ def _config() -> dict:
         "log_level": "INFO",
         "device": "auto",
         "quantum_backend": "numpy",
+        "quantum_architecture": "zz_linear",
+        "vqc_layers": 2,
+        "quantum_kernel_c": 1.0,
+        "quantum_kernel_max_train_instances": 0,
         "pca_variance_warning_threshold": 0.85,
         "small_packet_threshold": 200.0,
         "high_pps_quantile": 0.95,
@@ -130,6 +162,8 @@ def _config() -> dict:
         "logistic_regression_max_iter": 100,
         "num_workers": 0,
         "reuse_quantum_cache": False,
+        "report_detail_level": "presentation",
+        "include_individual_confusion_plots": False,
     }
 
 

@@ -9,7 +9,7 @@
   },
   "window_width": 6667,
   "pca_components": 6,
-  "circuit_reps": 2,
+  "circuit_reps": 4,
   "batch_size": 64,
   "quantum_batch_size": 128,
   "learning_rate": 0.001,
@@ -25,6 +25,10 @@
   "log_level": "INFO",
   "device": "auto",
   "quantum_backend": "auto",
+  "quantum_architecture": "vqc",
+  "vqc_layers": 2,
+  "quantum_kernel_c": 1.0,
+  "quantum_kernel_max_train_instances": 2500,
   "pca_variance_warning_threshold": 0.85,
   "small_packet_threshold": 200.0,
   "high_pps_quantile": 0.95,
@@ -34,5 +38,7 @@
   "rbf_components": 256,
   "logistic_regression_max_iter": 1000,
   "num_workers": 0,
-  "reuse_quantum_cache": false
+  "reuse_quantum_cache": false,
+  "report_detail_level": "presentation",
+  "include_individual_confusion_plots": false
 }

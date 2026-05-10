@@ -32,6 +32,10 @@ REQUIRED_FIELDS: dict[str, type | tuple[type, ...]] = {
     "log_level": str,
     "device": str,
     "quantum_backend": str,
+    "quantum_architecture": str,
+    "vqc_layers": int,
+    "quantum_kernel_c": (int, float),
+    "quantum_kernel_max_train_instances": int,
     "pca_variance_warning_threshold": (int, float),
     "small_packet_threshold": (int, float),
     "high_pps_quantile": (int, float),
@@ -42,11 +46,15 @@ REQUIRED_FIELDS: dict[str, type | tuple[type, ...]] = {
     "logistic_regression_max_iter": int,
     "num_workers": int,
     "reuse_quantum_cache": bool,
+    "report_detail_level": str,
+    "include_individual_confusion_plots": bool,
 }
 
 ALLOWED_FAMILIES = {"family_a", "family_b"}
 ALLOWED_DEVICE_MODES = {"auto", "cuda", "cpu"}
 ALLOWED_QUANTUM_BACKENDS = {"auto", "qiskit", "numpy"}
+ALLOWED_QUANTUM_ARCHITECTURES = {"zz_linear", "vqc", "quantum_kernel"}
+ALLOWED_REPORT_DETAIL_LEVELS = {"presentation", "full"}
 ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
@@ -91,6 +99,15 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError(
             f"quantum_backend must be one of {sorted(ALLOWED_QUANTUM_BACKENDS)}"
         )
+    if config["quantum_architecture"] not in ALLOWED_QUANTUM_ARCHITECTURES:
+        raise ValueError(
+            "quantum_architecture must be one of "
+            f"{sorted(ALLOWED_QUANTUM_ARCHITECTURES)}"
+        )
+    if config["report_detail_level"] not in ALLOWED_REPORT_DETAIL_LEVELS:
+        raise ValueError(
+            f"report_detail_level must be one of {sorted(ALLOWED_REPORT_DETAIL_LEVELS)}"
+        )
     if config["log_level"].upper() not in ALLOWED_LOG_LEVELS:
         raise ValueError(f"log_level must be one of {sorted(ALLOWED_LOG_LEVELS)}")
 
@@ -105,6 +122,7 @@ def validate_config(config: dict[str, Any]) -> None:
         "scheduler_patience",
         "rbf_components",
         "logistic_regression_max_iter",
+        "vqc_layers",
     ]
     for field in positive_integer_fields:
         if config[field] <= 0:
@@ -112,6 +130,10 @@ def validate_config(config: dict[str, Any]) -> None:
 
     if config["num_workers"] < 0:
         raise ValueError("Config field 'num_workers' cannot be negative.")
+    if config["quantum_kernel_max_train_instances"] < 0:
+        raise ValueError("quantum_kernel_max_train_instances cannot be negative.")
+    if float(config["quantum_kernel_c"]) <= 0.0:
+        raise ValueError("quantum_kernel_c must be positive.")
     if not 0.0 <= float(config["inference_threshold"]) <= 1.0:
         raise ValueError("inference_threshold must be in [0, 1].")
     if not 0.0 < float(config["high_pps_quantile"]) < 1.0:

@@ -9,6 +9,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import joblib
 import numpy as np
 import pandas as pd
 import torch
@@ -26,7 +27,14 @@ from src.model.scorer import load_model, load_threshold
 from src.preprocessing.preprocessor import Preprocessor
 from src.quantum.embedder import QuantumEmbedder
 from src.training.trainer import build_split_data, compute_or_load_quantum_features
+from src.training.trainer import quantum_kernel_matrix
 from src.utils.config import ensure_output_dirs, resolve_device
+
+ARCHITECTURE_LABELS = {
+    "zz_linear": "Quantum ZZ",
+    "vqc": "VQC",
+    "quantum_kernel": "Pure Quantum Kernel",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +235,17 @@ def evaluate_family(config: dict, family: str) -> dict[str, Any]:
     device = resolve_device(config)
     catalog = build_dataset_catalog(config)
     preprocessor = Preprocessor.load(output_root / f"preprocessor_{family}.pkl")
-    model = load_model(output_root / f"best_model_{family}.pt", device)
+    architecture = config.get("quantum_architecture", "zz_linear")
+    model = None
+    kernel_payload = None
+    if architecture == "quantum_kernel":
+        kernel_payload = joblib.load(output_root / f"best_model_{family}.joblib")
+    else:
+        model = load_model(
+            output_root / f"best_model_{family}.pt",
+            device,
+            expected_architecture=architecture,
+        )
     configured_threshold = float(config["inference_threshold"])
     if config["use_calibrated_threshold"]:
         threshold = load_threshold(
@@ -236,29 +254,38 @@ def evaluate_family(config: dict, family: str) -> dict[str, Any]:
     else:
         threshold = configured_threshold
 
-    embedder = QuantumEmbedder(
-        n_qubits=int(config["pca_components"]),
-        reps=int(config["circuit_reps"]),
-        device=device,
-        backend=config["quantum_backend"],
-        batch_size=int(config["quantum_batch_size"]),
-    )
+    embedder = None
+    if architecture in {"zz_linear", "quantum_kernel"}:
+        embedder = QuantumEmbedder(
+            n_qubits=int(config["pca_components"]),
+            reps=int(config["circuit_reps"]),
+            device=device,
+            backend=config["quantum_backend"],
+            batch_size=int(config["quantum_batch_size"]),
+        )
 
-    results: dict[str, Any] = {"family": family, "threshold": threshold, "splits": {}}
+    results: dict[str, Any] = {
+        "family": family,
+        "architecture": architecture,
+        "model_label": ARCHITECTURE_LABELS.get(architecture, architecture),
+        "threshold": threshold,
+        "splits": {},
+    }
     for split in ("validation", "test"):
         records = filter_catalog(catalog, family=family, split=split)
         split_data = build_split_data(config, records)
-        quantum_features = compute_or_load_quantum_features(
+        probabilities = predict_architecture_probabilities(
             config,
             family,
             split,
-            split_data.features,
+            split_data,
             preprocessor,
+            model,
             embedder,
-            force_recompute=not bool(config["reuse_quantum_cache"]),
+            kernel_payload,
+            architecture,
+            device,
         )
-        with torch.no_grad():
-            probabilities = torch.sigmoid(model(quantum_features)).detach().cpu().numpy()
         labels = split_data.metadata["y_instance"].to_numpy(dtype=int)
         split_results = {
             "instance": binary_metrics(labels, probabilities, threshold),
@@ -292,3 +319,49 @@ def evaluate_family(config: dict, family: str) -> dict[str, Any]:
         json.dump(existing, handle, indent=2)
     logger.info("Saved evaluation results to %s", results_path)
     return results
+
+
+def predict_architecture_probabilities(
+    config: dict,
+    family: str,
+    split: str,
+    split_data,
+    preprocessor: Preprocessor,
+    model: torch.nn.Module | None,
+    embedder: QuantumEmbedder | None,
+    kernel_payload: dict[str, Any] | None,
+    architecture: str,
+    device: torch.device,
+) -> np.ndarray:
+    if architecture == "zz_linear":
+        if model is None or embedder is None:
+            raise RuntimeError("ZZ-linear evaluation requires a model and embedder.")
+        quantum_features = compute_or_load_quantum_features(
+            config,
+            family,
+            split,
+            split_data.features,
+            preprocessor,
+            embedder,
+            force_recompute=not bool(config["reuse_quantum_cache"]),
+        )
+        with torch.no_grad():
+            return torch.sigmoid(model(quantum_features)).detach().cpu().numpy()
+    if architecture == "vqc":
+        if model is None:
+            raise RuntimeError("VQC evaluation requires a torch model.")
+        angles = torch.as_tensor(
+            preprocessor.transform(split_data.features),
+            dtype=torch.float32,
+            device=device,
+        )
+        with torch.no_grad():
+            return torch.sigmoid(model(angles)).detach().cpu().numpy()
+    if architecture == "quantum_kernel":
+        if kernel_payload is None or embedder is None:
+            raise RuntimeError("Quantum-kernel evaluation requires a saved kernel payload.")
+        angles = preprocessor.transform(split_data.features)
+        states = embedder.statevectors(angles, show_progress=True)
+        kernel = quantum_kernel_matrix(states, kernel_payload["train_statevectors"])
+        return kernel_payload["classifier"].predict_proba(kernel)[:, 1]
+    raise ValueError(f"Unsupported quantum architecture: {architecture}")

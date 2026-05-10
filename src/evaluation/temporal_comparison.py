@@ -12,6 +12,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import joblib
 import numpy as np
 import pandas as pd
 import torch
@@ -25,13 +26,13 @@ from tqdm import tqdm
 
 from src.data.catalog import build_dataset_catalog, filter_catalog
 from src.evaluation.evaluator import aggregate_window_scores
+from src.evaluation.evaluator import predict_architecture_probabilities
 from src.model.scorer import build_pos_weight, load_model, load_threshold
 from src.preprocessing.preprocessor import Preprocessor
 from src.quantum.embedder import QuantumEmbedder
 from src.training.trainer import (
     SplitData,
     build_split_data,
-    compute_or_load_quantum_features,
 )
 from src.utils.config import ensure_output_dirs, resolve_device
 from src.utils.seed import set_global_seed
@@ -53,14 +54,20 @@ class BestOnlineModel:
     threshold: float
 
 
-def generate_temporal_comparison_plots(config: dict) -> list[Path]:
+def generate_temporal_comparison_plots(
+    config: dict,
+    clean_existing: bool = False,
+    write_summary_table: bool = True,
+) -> list[Path]:
     output_root, plots_dir = ensure_output_dirs(config)
     catalog = build_dataset_catalog(config)
     written: list[Path] = []
     summary_rows: list[dict[str, Any]] = []
+    architecture = config.get("quantum_architecture", "zz_linear")
 
     for family in config["families"]:
         best = select_best_online_model(config, family)
+        quantum_label = _configured_quantum_label(config)
         logger.info(
             "Best online model for %s by test window F1: %s (F1=%.4f)",
             family,
@@ -74,7 +81,7 @@ def generate_temporal_comparison_plots(config: dict) -> list[Path]:
             config, filter_catalog(catalog, family=family, split="test")
         )
 
-        quantum_probabilities, quantum_threshold = predict_quantum(
+        quantum_probabilities, quantum_threshold = predict_quantum_architecture(
             config, family, test_data
         )
         if best.key == "quantum_pipeline":
@@ -93,18 +100,23 @@ def generate_temporal_comparison_plots(config: dict) -> list[Path]:
             quantum_windows["scenario"] == "attack"
         ].groupby("dataset_name"):
             best_dataset_windows = best_windows[best_windows["dataset_name"] == dataset_name]
-            output_path = plots_dir / f"temporal_compare_{family}_{dataset_name}.png"
+            output_path = (
+                plots_dir
+                / f"temporal_compare_{architecture}_{family}_{dataset_name}.png"
+            )
             plot_temporal_comparison(
                 quantum_dataset_windows,
                 best_dataset_windows,
                 quantum_threshold,
                 best.threshold,
+                quantum_label,
                 best.label,
                 output_path,
             )
             written.append(output_path)
             summary_rows.append(
                 {
+                    "quantum_architecture": architecture,
                     "family": family,
                     "dataset_name": dataset_name,
                     "best_online_model": best.label,
@@ -114,7 +126,7 @@ def generate_temporal_comparison_plots(config: dict) -> list[Path]:
                 }
             )
 
-    if summary_rows:
+    if summary_rows and write_summary_table:
         tables_dir = output_root / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
         summary = pd.DataFrame(summary_rows)
@@ -123,6 +135,8 @@ def generate_temporal_comparison_plots(config: dict) -> list[Path]:
         summary.to_csv(csv_path, index=False)
         md_path.write_text(_to_markdown(summary), encoding="utf-8")
         written.extend([csv_path, md_path])
+    if clean_existing:
+        _remove_stale_temporal_compare_plots(plots_dir, written)
     return written
 
 
@@ -135,7 +149,18 @@ def select_best_online_model(config: dict, family: str) -> BestOnlineModel:
     candidates: list[BestOnlineModel] = []
     quantum = results.get("quantum_pipeline")
     if quantum is not None:
-        candidates.append(_model_from_payload("quantum_pipeline", quantum))
+        configured_architecture = config.get("quantum_architecture", "zz_linear")
+        result_architecture = quantum.get("architecture", "zz_linear")
+        if result_architecture == configured_architecture:
+            candidates.append(_model_from_payload("quantum_pipeline", quantum))
+        else:
+            logger.warning(
+                "Skipping stale quantum result for %s: results were produced with "
+                "architecture=%s but config selects architecture=%s.",
+                family,
+                result_architecture,
+                configured_architecture,
+            )
     benchmarks = results.get("benchmarks", {})
     for key in ("classical_window_rbf", "pca_linear_ablation"):
         if key in benchmarks:
@@ -145,38 +170,51 @@ def select_best_online_model(config: dict, family: str) -> BestOnlineModel:
     return max(candidates, key=lambda item: item.test_window_f1)
 
 
-def predict_quantum(
+def predict_quantum_architecture(
     config: dict,
     family: str,
     test_data: SplitData,
 ) -> tuple[np.ndarray, float]:
     output_root, _ = ensure_output_dirs(config)
     device = resolve_device(config)
+    architecture = config.get("quantum_architecture", "zz_linear")
     threshold = (
         load_threshold(output_root / f"threshold_{family}.json", float(config["inference_threshold"]))
         if config["use_calibrated_threshold"]
         else float(config["inference_threshold"])
     )
     preprocessor = Preprocessor.load(output_root / f"preprocessor_{family}.pkl")
-    model = load_model(output_root / f"best_model_{family}.pt", device)
-    embedder = QuantumEmbedder(
-        n_qubits=int(config["pca_components"]),
-        reps=int(config["circuit_reps"]),
-        device=device,
-        backend=config["quantum_backend"],
-        batch_size=int(config["quantum_batch_size"]),
-    )
-    quantum_features = compute_or_load_quantum_features(
+    model = None
+    kernel_payload = None
+    if architecture == "quantum_kernel":
+        kernel_payload = joblib.load(output_root / f"best_model_{family}.joblib")
+    else:
+        model = load_model(
+            output_root / f"best_model_{family}.pt",
+            device,
+            expected_architecture=architecture,
+        )
+    embedder = None
+    if architecture in {"zz_linear", "quantum_kernel"}:
+        embedder = QuantumEmbedder(
+            n_qubits=int(config["pca_components"]),
+            reps=int(config["circuit_reps"]),
+            device=device,
+            backend=config["quantum_backend"],
+            batch_size=int(config["quantum_batch_size"]),
+        )
+    probabilities = predict_architecture_probabilities(
         config,
         family,
         "test",
-        test_data.features,
+        test_data,
         preprocessor,
+        model,
         embedder,
-        force_recompute=not bool(config["reuse_quantum_cache"]),
+        kernel_payload,
+        architecture,
+        device,
     )
-    with torch.no_grad():
-        probabilities = torch.sigmoid(model(quantum_features)).detach().cpu().numpy()
     return probabilities, threshold
 
 
@@ -203,6 +241,7 @@ def plot_temporal_comparison(
     best_windows: pd.DataFrame,
     quantum_threshold: float,
     best_threshold: float,
+    quantum_label: str,
     best_label: str,
     path: str | Path,
 ) -> None:
@@ -230,7 +269,7 @@ def plot_temporal_comparison(
         marker="o",
         linewidth=2.0,
         color="#1f77b4",
-        label="Quantum ZZ max score",
+        label=f"{quantum_label} max score",
     )
     ax.plot(
         best["window_id"],
@@ -240,14 +279,14 @@ def plot_temporal_comparison(
         color="#2ca02c",
         label=f"{best_label} max score",
     )
-    _scatter_predictions(ax, quantum, marker="^", color="#ff7f0e", label="Quantum predicted")
+    _scatter_predictions(ax, quantum, marker="^", color="#ff7f0e", label=f"{quantum_label} predicted")
     _scatter_predictions(ax, best, marker="D", color="#9467bd", label=f"{best_label} predicted")
     ax.axhline(
         quantum_threshold,
         linestyle="--",
         color="#1f77b4",
         linewidth=1.8,
-        label=f"Quantum threshold={quantum_threshold:.2f}",
+        label=f"{quantum_label} threshold={quantum_threshold:.2f}",
     )
     ax.axhline(
         best_threshold,
@@ -257,7 +296,7 @@ def plot_temporal_comparison(
         label=f"{best_label} threshold={best_threshold:.2f}",
     )
 
-    quantum_summary = _window_summary_text("Quantum", quantum)
+    quantum_summary = _window_summary_text(quantum_label, quantum)
     best_summary = _window_summary_text(best_label, best)
     ax.text(
         0.99,
@@ -272,7 +311,7 @@ def plot_temporal_comparison(
     family = str(quantum["family"].iloc[0])
     dataset_name = str(quantum["dataset_name"].iloc[0])
     ax.set_title(
-        f"{family} {dataset_name}: Quantum ZZ vs best online model",
+        f"{family} {dataset_name}: {quantum_label} vs best online model",
         fontsize=15,
         weight="bold",
     )
@@ -289,9 +328,10 @@ def plot_temporal_comparison(
 def _model_from_payload(key: str, payload: dict[str, Any]) -> BestOnlineModel:
     window_payload = payload["splits"]["test"]["window"]
     threshold = float(payload.get("threshold", 0.5))
+    label = payload.get("model_label") if key == "quantum_pipeline" else ONLINE_MODEL_LABELS[key]
     return BestOnlineModel(
         key=key,
-        label=ONLINE_MODEL_LABELS[key],
+        label=label,
         test_window_f1=float(window_payload.get("f1") or 0.0),
         threshold=threshold,
     )
@@ -449,6 +489,22 @@ def _window_summary_text(label: str, windows: pd.DataFrame) -> str:
         f"FP={summary[f'{prefix}_false_positive_windows']}  "
         f"missed={summary[f'{prefix}_missed_windows']}"
     )
+
+
+def _configured_quantum_label(config: dict) -> str:
+    labels = {
+        "zz_linear": "Quantum ZZ",
+        "vqc": "VQC",
+        "quantum_kernel": "Pure Quantum Kernel",
+    }
+    return labels.get(config.get("quantum_architecture", "zz_linear"), "Quantum")
+
+
+def _remove_stale_temporal_compare_plots(plots_dir: Path, keep_paths: list[Path]) -> None:
+    keep = {path.resolve() for path in keep_paths if path.suffix == ".png"}
+    for path in plots_dir.glob("temporal_compare*.png"):
+        if path.resolve() not in keep:
+            path.unlink()
 
 
 def _to_markdown(frame: pd.DataFrame) -> str:

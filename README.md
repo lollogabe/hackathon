@@ -19,6 +19,20 @@ pip install -r requirements.txt
 
 CUDA is used automatically when `torch.cuda.is_available()` is true and `config.json` has `"device": "auto"`. The Qiskit Aer backend is supported through `qiskit-aer`; when it is unavailable and `quantum_backend` is `"auto"`, the project uses an exact NumPy statevector fallback with the same observables.
 
+The quantum model architecture is selected with `quantum_architecture`:
+
+- `zz_linear`: fixed ZZ feature map plus linear scorer.
+- `vqc`: trainable differentiable VQC in PyTorch.
+- `quantum_kernel`: pure statevector kernel with a precomputed-kernel SVC.
+
+To run all three architectures without overwriting artifacts, use:
+
+```bash
+python run_all_architectures.py
+```
+
+This writes separate presentation plot sets to `outputs/architectures/{zz_linear,vqc,quantum_kernel}/plots/`.
+
 ## Dataset Setup
 
 Place the datasets under `Datasets/` with this reduced-schema structure:
@@ -87,16 +101,28 @@ python report_results.py
 ```
 
 This writes slide-friendly comparison charts, confusion-matrix plots, metric heatmaps, threshold charts, and CSV/Markdown tables to `outputs/plots/` and `outputs/tables/`.
+By default, `report_detail_level: "presentation"` keeps the plot count compact and skips the large set of individual confusion matrices.
+For plot-only reporting without CSV/Markdown tables:
+
+```bash
+python report_results.py --plots-only
+```
 
 For speaker notes and artifact-by-artifact interpretation, see `PRESENTATION_EXPLANATIONS.md`.
 
-To overlay Quantum ZZ temporal scores with the best online/windowed model by test window F1:
+To overlay the currently selected quantum architecture with the best online/windowed model by test window F1:
 
 ```bash
 python temporal_compare.py
 ```
 
-This writes `outputs/plots/temporal_compare_{family}_{dataset_name}.png` and `outputs/tables/temporal_comparison_summary.*`.
+The script reads `quantum_architecture` from `config.json`, or you can override it for one run:
+
+```bash
+python temporal_compare.py --architecture vqc
+```
+
+This writes architecture-tagged plots such as `outputs/plots/temporal_compare_vqc_{family}_{dataset_name}.png` and `outputs/tables/temporal_comparison_summary.*`. Older `temporal_compare*.png` files are removed by default; pass `--keep-existing` to keep them.
 
 ## Benchmarking
 

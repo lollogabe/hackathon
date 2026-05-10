@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -38,13 +39,18 @@ def generate_reports(config: dict) -> dict[str, list[Path]]:
     plots_dir = output_root / "plots"
     tables_dir = output_root / "tables"
     plots_dir.mkdir(parents=True, exist_ok=True)
-    tables_dir.mkdir(parents=True, exist_ok=True)
+    write_tables_enabled = bool(config.get("write_report_tables", True))
+    if write_tables_enabled:
+        tables_dir.mkdir(parents=True, exist_ok=True)
+    elif tables_dir.exists():
+        shutil.rmtree(tables_dir)
 
     metrics, latencies, thresholds = load_report_frames(config)
     written: dict[str, list[Path]] = {"tables": [], "plots": []}
 
-    written["tables"].extend(write_tables(metrics, latencies, thresholds, tables_dir))
-    written["plots"].extend(write_plots(metrics, latencies, thresholds, plots_dir))
+    if write_tables_enabled:
+        written["tables"].extend(write_tables(metrics, latencies, thresholds, tables_dir))
+    written["plots"].extend(write_plots(metrics, latencies, thresholds, plots_dir, config))
 
     logger.info(
         "Generated %s tables and %s plots.",
@@ -75,7 +81,11 @@ def load_report_frames(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
             method_payloads.append((benchmark_name, benchmark_payload))
 
         for method_key, payload in method_payloads:
-            method_label = METHOD_LABELS.get(method_key, method_key.replace("_", " ").title())
+            method_label = (
+                payload.get("model_label")
+                if method_key == "quantum_pipeline"
+                else METHOD_LABELS.get(method_key, method_key.replace("_", " ").title())
+            )
             for split, split_payload in payload.get("splits", {}).items():
                 for level in ("instance", "window", "dataset"):
                     metrics = split_payload.get(level)
@@ -193,6 +203,7 @@ def write_plots(
     latencies: pd.DataFrame,
     thresholds: pd.DataFrame,
     plots_dir: Path,
+    config: dict,
 ) -> list[Path]:
     written: list[Path] = []
     if not metrics.empty:
@@ -228,21 +239,29 @@ def write_plots(
             plot_quantum_confusion_grid(metrics, family, "test", path)
             written.append(path)
 
-        for row in metrics.itertuples(index=False):
-            matrix = getattr(row, "confusion_matrix")
-            if matrix is None:
-                continue
-            path = (
-                plots_dir
-                / "confusion_matrices"
-                / f"{row.family}_{row.method}_{row.split}_{row.level}.png"
-            )
-            plot_single_confusion_matrix(
-                matrix,
-                f"{row.method_label} | {row.family} | {row.split} | {row.level_label}",
-                path,
-            )
-            written.append(path)
+        include_individual = bool(config.get("include_individual_confusion_plots", False))
+        if config.get("report_detail_level", "presentation") == "full":
+            include_individual = True
+        if include_individual:
+            for row in metrics.itertuples(index=False):
+                matrix = getattr(row, "confusion_matrix")
+                if matrix is None:
+                    continue
+                path = (
+                    plots_dir
+                    / "confusion_matrices"
+                    / f"{row.family}_{row.method}_{row.split}_{row.level}.png"
+                )
+                plot_single_confusion_matrix(
+                    matrix,
+                    f"{row.method_label} | {row.family} | {row.split} | {row.level_label}",
+                    path,
+                )
+                written.append(path)
+        else:
+            stale_detail_dir = plots_dir / "confusion_matrices"
+            if stale_detail_dir.exists():
+                shutil.rmtree(stale_detail_dir)
 
     if not latencies.empty:
         path = plots_dir / "presentation_detection_latency.png"

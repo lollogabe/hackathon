@@ -11,9 +11,11 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import joblib
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.svm import SVC
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -36,6 +38,7 @@ from src.features.pipeline import compute_instance_features
 from src.features.schema import FEATURE_COLUMNS, METADATA_COLUMNS
 from src.model.scorer import (
     QuantumScorer,
+    VQCScorer,
     build_pos_weight,
     calibrate_threshold,
     save_model,
@@ -205,6 +208,15 @@ def _plot_training_curves(history: list[dict[str, float]], path: Path) -> None:
 
 
 def train_family(config: dict, family: str) -> dict:
+    architecture = config.get("quantum_architecture", "zz_linear")
+    if architecture == "vqc":
+        return train_vqc_family(config, family)
+    if architecture == "quantum_kernel":
+        return train_quantum_kernel_family(config, family)
+    return train_zz_linear_family(config, family)
+
+
+def train_zz_linear_family(config: dict, family: str) -> dict:
     output_root, plots_dir = ensure_output_dirs(config)
     device = resolve_device(config)
     catalog = build_dataset_catalog(config)
@@ -371,8 +383,253 @@ def train_family(config: dict, family: str) -> dict:
     logger.info("Saved best model and threshold for %s", family)
     return {
         "family": family,
+        "architecture": "zz_linear",
         "best_val_f1": best_val_f1,
         "threshold": threshold,
         "threshold_validation_f1": threshold_f1,
         "epochs": len(history),
     }
+
+
+def train_vqc_family(config: dict, family: str) -> dict:
+    output_root, plots_dir = ensure_output_dirs(config)
+    device = resolve_device(config)
+    catalog = build_dataset_catalog(config)
+    train_data = build_split_data(config, filter_catalog(catalog, family=family, split="train"))
+    val_data = build_split_data(config, filter_catalog(catalog, family=family, split="validation"))
+
+    preprocessor = Preprocessor(
+        n_components=int(config["pca_components"]),
+        variance_warning_threshold=float(config["pca_variance_warning_threshold"]),
+    ).fit(train_data.features)
+    preprocessor.save(output_root / f"preprocessor_{family}.pkl")
+
+    train_angles = torch.as_tensor(
+        preprocessor.transform(train_data.features),
+        dtype=torch.float32,
+        device=device,
+    )
+    val_angles = torch.as_tensor(
+        preprocessor.transform(val_data.features),
+        dtype=torch.float32,
+        device=device,
+    )
+    train_labels = torch.as_tensor(
+        train_data.metadata["y_instance"].to_numpy(dtype="float32"),
+        dtype=torch.float32,
+        device=device,
+    )
+    val_labels = torch.as_tensor(
+        val_data.metadata["y_instance"].to_numpy(dtype="float32"),
+        dtype=torch.float32,
+        device=device,
+    )
+
+    model = VQCScorer(
+        int(config["pca_components"]),
+        int(config["vqc_layers"]),
+    ).to(device)
+    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=build_pos_weight(train_labels, device))
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=float(config["learning_rate"]),
+        weight_decay=float(config["weight_decay"]),
+    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="max",
+        patience=int(config["scheduler_patience"]),
+        factor=0.5,
+    )
+    generator = torch.Generator()
+    generator.manual_seed(int(config["seed"]))
+    loader = DataLoader(
+        TensorDataset(train_angles, train_labels),
+        batch_size=int(config["batch_size"]),
+        shuffle=True,
+        num_workers=int(config["num_workers"]),
+        generator=generator,
+    )
+
+    best_state = copy.deepcopy(model.state_dict())
+    best_val_f1 = -1.0
+    epochs_without_improvement = 0
+    history: list[dict[str, float]] = []
+    progress = tqdm(
+        range(1, int(config["max_epochs"]) + 1),
+        desc=f"train VQC {family}",
+        file=sys.stdout,
+    )
+    for epoch in progress:
+        model.train()
+        for batch_angles, batch_labels in loader:
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(batch_angles)
+            loss = criterion(logits, batch_labels)
+            loss.backward()
+            optimizer.step()
+
+        train_loss, train_metrics, _ = _evaluate_tensor(model, train_angles, train_labels, criterion)
+        val_loss, val_metrics, _ = _evaluate_tensor(model, val_angles, val_labels, criterion)
+        scheduler.step(float(val_metrics["f1"] or 0.0))
+        row = {
+            "epoch": float(epoch),
+            "train_loss": float(train_loss),
+            "val_loss": float(val_loss),
+            "train_accuracy": float(train_metrics["accuracy"] or 0.0),
+            "train_precision": float(train_metrics["precision"] or 0.0),
+            "train_recall": float(train_metrics["recall"] or 0.0),
+            "train_f1": float(train_metrics["f1"] or 0.0),
+            "train_auc_roc": float(train_metrics["auc_roc"] or 0.0),
+            "val_accuracy": float(val_metrics["accuracy"] or 0.0),
+            "val_precision": float(val_metrics["precision"] or 0.0),
+            "val_recall": float(val_metrics["recall"] or 0.0),
+            "val_f1": float(val_metrics["f1"] or 0.0),
+            "val_auc_roc": float(val_metrics["auc_roc"] or 0.0),
+        }
+        history.append(row)
+        progress.set_postfix(
+            {
+                "loss": f"{row['train_loss']:.4f}",
+                "acc": f"{row['train_accuracy']:.3f}",
+                "prec": f"{row['train_precision']:.3f}",
+                "rec": f"{row['train_recall']:.3f}",
+                "f1": f"{row['train_f1']:.3f}",
+                "auc": f"{row['train_auc_roc']:.3f}",
+                "val_loss": f"{row['val_loss']:.4f}",
+                "val_acc": f"{row['val_accuracy']:.3f}",
+                "val_prec": f"{row['val_precision']:.3f}",
+                "val_rec": f"{row['val_recall']:.3f}",
+                "val_f1": f"{row['val_f1']:.3f}",
+                "val_auc": f"{row['val_auc_roc']:.3f}",
+            }
+        )
+        current_val_f1 = float(val_metrics["f1"] or 0.0)
+        if current_val_f1 > best_val_f1:
+            best_val_f1 = current_val_f1
+            best_state = copy.deepcopy(model.state_dict())
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+        if epochs_without_improvement >= int(config["early_stopping_patience"]):
+            logger.info("Early stopping VQC %s at epoch %s", family, epoch)
+            break
+
+    model.load_state_dict(best_state)
+    save_model(output_root / f"best_model_{family}.pt", model, family, config)
+    _, _, val_probabilities = _evaluate_tensor(model, val_angles, val_labels, criterion)
+    threshold, threshold_f1 = calibrate_threshold(
+        val_probabilities,
+        val_data.metadata["y_instance"].to_numpy(dtype=int),
+        float(config["threshold_sweep_min"]),
+        float(config["threshold_sweep_max"]),
+        float(config["threshold_sweep_step"]),
+    )
+    save_threshold(output_root / f"threshold_{family}.json", family, threshold, threshold_f1)
+    _plot_training_curves(history, plots_dir / f"training_curves_{family}.png")
+    return {
+        "family": family,
+        "architecture": "vqc",
+        "best_val_f1": best_val_f1,
+        "threshold": threshold,
+        "threshold_validation_f1": threshold_f1,
+        "epochs": len(history),
+    }
+
+
+def train_quantum_kernel_family(config: dict, family: str) -> dict:
+    output_root, _plots_dir = ensure_output_dirs(config)
+    device = resolve_device(config)
+    catalog = build_dataset_catalog(config)
+    train_data = build_split_data(config, filter_catalog(catalog, family=family, split="train"))
+    val_data = build_split_data(config, filter_catalog(catalog, family=family, split="validation"))
+
+    preprocessor = Preprocessor(
+        n_components=int(config["pca_components"]),
+        variance_warning_threshold=float(config["pca_variance_warning_threshold"]),
+    ).fit(train_data.features)
+    preprocessor.save(output_root / f"preprocessor_{family}.pkl")
+
+    train_angles = preprocessor.transform(train_data.features)
+    val_angles = preprocessor.transform(val_data.features)
+    train_labels = train_data.metadata["y_instance"].to_numpy(dtype=int)
+    sampled_indices = _sample_kernel_indices(
+        train_labels,
+        int(config["quantum_kernel_max_train_instances"]),
+        int(config["seed"]),
+    )
+    train_angles_sampled = train_angles[sampled_indices]
+    train_labels_sampled = train_labels[sampled_indices]
+
+    embedder = QuantumEmbedder(
+        n_qubits=int(config["pca_components"]),
+        reps=int(config["circuit_reps"]),
+        device=device,
+        backend=config["quantum_backend"],
+        batch_size=int(config["quantum_batch_size"]),
+    )
+    train_states = embedder.statevectors(train_angles_sampled, show_progress=True)
+    val_states = embedder.statevectors(val_angles, show_progress=True)
+    train_kernel = quantum_kernel_matrix(train_states, train_states)
+    val_kernel = quantum_kernel_matrix(val_states, train_states)
+
+    classifier = SVC(
+        kernel="precomputed",
+        class_weight="balanced",
+        C=float(config["quantum_kernel_c"]),
+        probability=True,
+        random_state=int(config["seed"]),
+    )
+    classifier.fit(train_kernel, train_labels_sampled)
+    val_probabilities = classifier.predict_proba(val_kernel)[:, 1]
+    threshold, threshold_f1 = calibrate_threshold(
+        val_probabilities,
+        val_data.metadata["y_instance"].to_numpy(dtype=int),
+        float(config["threshold_sweep_min"]),
+        float(config["threshold_sweep_max"]),
+        float(config["threshold_sweep_step"]),
+    )
+    save_threshold(output_root / f"threshold_{family}.json", family, threshold, threshold_f1)
+    joblib.dump(
+        {
+            "family": family,
+            "architecture": "quantum_kernel",
+            "classifier": classifier,
+            "train_statevectors": train_states,
+            "train_indices": sampled_indices,
+            "train_labels": train_labels_sampled,
+            "n_qubits": int(config["pca_components"]),
+            "circuit_reps": int(config["circuit_reps"]),
+        },
+        output_root / f"best_model_{family}.joblib",
+    )
+    return {
+        "family": family,
+        "architecture": "quantum_kernel",
+        "threshold": threshold,
+        "threshold_validation_f1": threshold_f1,
+        "kernel_train_instances": int(len(sampled_indices)),
+    }
+
+
+def quantum_kernel_matrix(left_states: np.ndarray, right_states: np.ndarray) -> np.ndarray:
+    overlaps = left_states @ np.conjugate(right_states).T
+    return (np.abs(overlaps) ** 2).astype("float32")
+
+
+def _sample_kernel_indices(labels: np.ndarray, max_instances: int, seed: int) -> np.ndarray:
+    labels = np.asarray(labels)
+    if max_instances == 0 or len(labels) <= max_instances:
+        return np.arange(len(labels), dtype=int)
+    rng = np.random.default_rng(seed)
+    selected: list[np.ndarray] = []
+    for value in sorted(np.unique(labels)):
+        class_indices = np.flatnonzero(labels == value)
+        class_quota = max(1, int(round(max_instances * len(class_indices) / len(labels))))
+        class_quota = min(class_quota, len(class_indices))
+        selected.append(rng.choice(class_indices, size=class_quota, replace=False))
+    indices = np.concatenate(selected)
+    if len(indices) > max_instances:
+        indices = rng.choice(indices, size=max_instances, replace=False)
+    rng.shuffle(indices)
+    return np.sort(indices.astype(int))

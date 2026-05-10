@@ -1,6 +1,21 @@
 # Pipeline: Inputs, Outputs, and Shapes at Every Stage
 
 ```
+
+## Architecture Switches
+
+The default pipeline above corresponds to `quantum_architecture = "zz_linear"`.
+The project also supports two alternate quantum architectures selected in
+`config.json`:
+
+- `vqc`: Stages 0-7 are unchanged, but Stage 8 becomes a trainable
+  differentiable statevector VQC in PyTorch. The VQC uses data re-uploading,
+  trainable `RY` rotations, trainable adjacent `RZZ` phases, and Z/ZZ readout
+  before the final scorer.
+- `quantum_kernel`: Stages 0-7 are unchanged, but Stage 8 returns exact
+  statevectors and trains a pure kernel classifier with
+  `K(x, y) = |<phi(x)|phi(y)>|^2`. This architecture uses a precomputed-kernel
+  SVC instead of the PyTorch linear scoring layer in Stage 9.
 =============================================================================
 STAGE 0 — Raw Flow Data
 =============================================================================

@@ -1,0 +1,5 @@
+{
+  "family": "family_a",
+  "threshold": 0.33,
+  "validation_f1": 0.7986191024165707
+}
